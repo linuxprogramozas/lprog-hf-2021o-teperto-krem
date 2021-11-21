@@ -15,18 +15,18 @@
 #include <array>
 
 namespace tepertokrem {
+namespace {
 struct HttpTcpConnection {
   HttpTcpConnection(ServerSocket ssock) {
     sockaddr_in address2;
-    socklen_t  address_length = sizeof(address2);
+    socklen_t address_length = sizeof(address2);
     std::memset(&address2, 0, sizeof(address2));
-    if (csock = accept(ssock.value, reinterpret_cast<sockaddr*>(&address2), &address_length); csock.value > 0) {
+    if (csock = accept(ssock.value, reinterpret_cast<sockaddr *>(&address2), &address_length); csock.value > 0) {
       fcntl(csock.value, F_SETFL, fcntl(csock.value, F_GETFL, 0) | O_NONBLOCK);
       int optval = 1;
       setsockopt(csock.value, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval));
       address = Address{address2.sin_addr.s_addr, address2.sin_port};
-    }
-    else if (auto err = errno; err != EAGAIN) {
+    } else if (auto err = errno; err != EAGAIN) {
       std::cerr << "accept(): " << std::strerror(err) << std::endl;
     }
   }
@@ -45,6 +45,7 @@ struct HttpTcpConnection {
   ClientSocket csock;
   Address address;
 };
+}
 
 Stream2 Http(ServerSocket ssock) {
   HttpTcpConnection conn{ssock};

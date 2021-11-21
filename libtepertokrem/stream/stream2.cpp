@@ -2,6 +2,7 @@
  * @author Ondrejó András
  * @date 2021.11.21
  */
+#include <iostream>
 #include "stream2.hpp"
 #include "../application/application.hpp"
 
@@ -13,6 +14,8 @@ Stream2::~Stream2() {
     handle_.promise().should_close = true;
     if (!handle_.done())
       handle_.resume();
+    if (handle_)
+      handle_.destroy();
   }
 }
 

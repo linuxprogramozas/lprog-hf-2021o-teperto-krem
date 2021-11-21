@@ -3,6 +3,7 @@
  * @date 2021.11.21
  */
 #pragma once
+#include <iostream>
 #include <coroutine>
 #include <memory>
 #include <utility>
@@ -18,9 +19,21 @@ class Stream2 {
 
   Stream2(coro_handle handle);
   Stream2(const Stream2&) = delete;
-  Stream2(Stream2&&) = default;
   Stream2 &operator=(const Stream2&) = delete;
-  Stream2 &operator=(Stream2&&) = default;
+  inline Stream2(Stream2 &&other) noexcept {
+    handle_ = other.handle_;
+    other.handle_ = coro_handle{};
+  }
+  inline Stream2 &operator=(Stream2&&other) noexcept {
+    if (this == &other)
+      return *this;
+    if (handle_) {
+      handle_.destroy();
+    }
+    handle_ = other.handle_;
+    other.handle_ = coro_handle {};
+    return *this;
+  }
   ~Stream2();
 
   ClientSocket GetFileDescriptor() const;
@@ -62,7 +75,7 @@ class Stream2 {
 
 struct StreamContainer {
   Stream2 stream;
-  inline StreamContainer(Stream2 &&stream): stream{std::move(stream)} {}
+  explicit inline StreamContainer(Stream2 &&stream) noexcept: stream{std::move(stream)} {}
   StreamContainer(const StreamContainer&) = delete;
   StreamContainer(StreamContainer&&) = default;
   StreamContainer &operator=(const StreamContainer&) = delete;
