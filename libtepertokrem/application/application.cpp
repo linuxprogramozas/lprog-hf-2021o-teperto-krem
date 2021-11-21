@@ -16,6 +16,7 @@
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
 #include "../stream/tcpstream.hpp"
+#include "../http/http.hpp"
 
 namespace {
 volatile std::sig_atomic_t running = 0;
@@ -106,24 +107,26 @@ int Application::EventLoop() {
             std::cerr << "EPOLLPRI" << std::endl;
           }
           if (events[i].events & EPOLLIN) { // Bejovo kapcsolat
-            for (auto conn = TcpStream::Accept(ssock_); conn != nullptr; conn = TcpStream::Accept(ssock_)) {
-              AddToEPoll(conn.get());
-              streams_.emplace_back(conn.release());
+            for (auto conn = Http(ssock_); conn; conn = Http(ssock_)) {
+              auto container = std::make_unique<StreamContainer>(std::move(conn));
+              AddToEPoll(container.get());
+              container->stream.SetSelf(container.get());
+              streams_.emplace_back(std::move(container));
             }
           }
         }
         else {
           if (events[i].events & EPOLLERR) {
-            RemoveStreamLater(reinterpret_cast<Stream*>(events[i].data.ptr));
+            RemoveStreamLater(reinterpret_cast<StreamContainer*>(events[i].data.ptr));
           }
           if (events[i].events & EPOLLRDHUP) {
-            RemoveStreamLater(reinterpret_cast<Stream*>(events[i].data.ptr));
+            RemoveStreamLater(reinterpret_cast<StreamContainer*>(events[i].data.ptr));
           }
           if (events[i].events & EPOLLIN) {
-            reinterpret_cast<Stream*>(events[i].data.ptr)->Read();
+            reinterpret_cast<StreamContainer*>(events[i].data.ptr)->stream.Read();
           }
           if (events[i].events & EPOLLOUT) {
-            reinterpret_cast<Stream*>(events[i].data.ptr)->Write();
+            reinterpret_cast<StreamContainer*>(events[i].data.ptr)->stream.Write();
           }
         }
       }
@@ -133,32 +136,33 @@ int Application::EventLoop() {
   return 0;
 }
 
-void Application::AddToEPoll(Stream *s) {
+void Application::AddToEPoll(StreamContainer *s) {
   epoll_event event;
   event.data.ptr = s;
   event.events =
-      (s->ShouldRead() ? EPOLLIN: 0) | (s->ShouldWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
-  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, s->GetFileDescriptor(), &event); res < 0) {
+      (s->stream.NeedRead() ? EPOLLIN: 0) | (s->stream.NeedWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
+  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, s->stream.GetFileDescriptor().value, &event); res < 0) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
   }
 }
 
-void Application::UpdateInEPoll(Stream *s) {
+void Application::UpdateInEPoll(StreamContainer *s) {
   epoll_event event;
   event.data.ptr = s;
   event.events =
-      (s->ShouldRead() ? EPOLLIN: 0) | (s->ShouldWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
-  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_MOD, s->GetFileDescriptor(), &event); res < 0) {
+      (s->stream.NeedRead() ? EPOLLIN: 0) | (s->stream.NeedWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
+  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_MOD, s->stream.GetFileDescriptor().value, &event); res < 0) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
   }
 }
 
-void Application::RemoveStreamLater(Stream *s) {
+void Application::RemoveStreamLater(StreamContainer *s) {
   remove_list_.insert(s);
 }
 
 void Application::RemoveStreams() {
   // Broadcast stuff
+  /*
   for (auto &s: remove_list_) {
     auto tcp = dynamic_cast<TcpStream*>(s);
     if (tcp != nullptr) {
@@ -166,9 +170,11 @@ void Application::RemoveStreams() {
       std::cerr << "Closed " << address.AddressString() << ":" << address.PortString() << std::endl;
     }
   }
+   */
   streams_.erase(
-      std::remove_if(streams_.begin(), streams_.end(), [this](const std::unique_ptr<Stream> &ptr) { return remove_list_.contains(ptr.get());}),
-      streams_.end());
+      std::remove_if(streams_.begin(), streams_.end(),
+                     [this](auto &ptr) { return remove_list_.contains(ptr.get()); }),
+                     streams_.end());
   remove_list_.clear();
 }
 

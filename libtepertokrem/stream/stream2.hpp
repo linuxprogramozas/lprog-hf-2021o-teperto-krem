@@ -4,6 +4,8 @@
  */
 #pragma once
 #include <coroutine>
+#include <memory>
+#include <utility>
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
 
@@ -17,13 +19,19 @@ class Stream2 {
   Stream2(coro_handle handle);
   Stream2(const Stream2&) = delete;
   Stream2(Stream2&&) = default;
+  Stream2 &operator=(const Stream2&) = delete;
+  Stream2 &operator=(Stream2&&) = default;
   ~Stream2();
+
+  ClientSocket GetFileDescriptor() const;
 
   void Read();
   void Write();
 
   [[nodiscard]] bool NeedRead() const;
   [[nodiscard]] bool NeedWrite() const;
+
+  void SetSelf(struct StreamContainer *container);
 
   explicit operator bool() const;
 
@@ -41,16 +49,26 @@ class Stream2 {
     StreamEnableRead read;
     StreamEnableWrite write;
 
-    constexpr bool await_ready() const noexcept;
+    bool await_ready() const noexcept;
     void await_suspend(coro_handle handle) noexcept;
     StreamEvent await_resume() const noexcept;
-   private:
-    coro_handle *handle = nullptr;
+
+    promise_type *promise = nullptr; // Privat kene legyen de ugy nem mukodik
   };
 
  private:
   coro_handle handle_;
 };
+
+struct StreamContainer {
+  Stream2 stream;
+  inline StreamContainer(Stream2 &&stream): stream{std::move(stream)} {}
+  StreamContainer(const StreamContainer&) = delete;
+  StreamContainer(StreamContainer&&) = default;
+  StreamContainer &operator=(const StreamContainer&) = delete;
+  StreamContainer &operator=(StreamContainer&&) = default;
+};
+using StreamPtr = std::unique_ptr<StreamContainer>;
 
 struct Stream2::promise_type {
   bool can_read = false;
@@ -61,15 +79,19 @@ struct Stream2::promise_type {
 
   ClientSocket csock = ClientSocket{-1};
 
+  StreamContainer *self = nullptr;
+
   using coro_handle = Stream2::coro_handle;
 
   inline auto get_return_object() { return coro_handle::from_promise(*this); }
   inline auto initial_suspend() { return std::suspend_never{}; }
-  inline auto final_suspend() noexcept { return std::suspend_never{}; }
+  inline auto final_suspend() noexcept { return std::suspend_always{}; }
   void return_void() {}
   void unhandled_exception() {}
 
-  std::suspend_never yield_value(ClientSocket csock);
+  std::suspend_always yield_value(ClientSocket csock);
 
 };
+
+
 }

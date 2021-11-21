@@ -11,6 +11,7 @@
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
 #include "../stream/stream.hpp"
+#include "../stream/stream2.hpp"
 
 namespace tepertokrem {
 class Application {
@@ -22,7 +23,8 @@ class Application {
   int ListenAndServe(Address address);
   void Stop();
 
-  void RemoveStreamLater(Stream *s);
+  void RemoveStreamLater(StreamContainer *s);
+  void UpdateInEPoll(StreamContainer *s);
  private:
   Application();
 
@@ -33,11 +35,10 @@ class Application {
 
   int EventLoop();
 
-  void AddToEPoll(Stream *s);
-  void UpdateInEPoll(Stream *s);
+  void AddToEPoll(StreamContainer *s);
 
-  std::vector<std::unique_ptr<Stream>> streams_;
-  std::set<Stream*> remove_list_;
+  std::vector<StreamPtr> streams_;
+  std::set<StreamContainer*> remove_list_;
   void RemoveStreams();
 
 };

@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <cstring>
 #include "../address.hpp"
+#include <array>
 
 namespace tepertokrem {
 struct HttpTcpConnection {
@@ -33,6 +34,7 @@ struct HttpTcpConnection {
     if (*this) {
       shutdown(csock.value, SHUT_RDWR);
       close(csock.value);
+      std::cerr << "Connection closed: " << address.AddressString() << ":" << address.PortString() << std::endl;
     }
   }
 
@@ -49,6 +51,30 @@ Stream2 Http(ServerSocket ssock) {
   if (!conn)
     co_return; // Hiba
   co_yield conn.csock;
+  do {
+    auto event = co_await Stream2::StreamEnableRW{.read = Stream2::StreamEnableRead{true}};
+    if (event.read) { // Olvasas
+      std::array<char, 256> buf{};
+      bool can_read = true;
+      while (can_read) {
+        if (auto len = recv(conn.csock.value, buf.data(), buf.size(), 0); len > 0) {
+          write(STDOUT_FILENO, buf.data(), len);
+        } else if (len == -1) {
+          if (auto err = errno; err != EAGAIN) {
+            std::cerr << std::strerror(err) << std::endl; // Szar van, nem tudom mi
+          }
+          can_read = false; // Elfogyott az olvashato adat
+        } else if (len == 0) {
+          co_return; // Kapcsolat lezarva
+        }
+      }
+    }
+    // TODO iras
+    if (event.close) {
+      std::cerr << "Close requested" << std::endl;
+      break;
+    }
+  } while (true);
   co_return;
 }
 }

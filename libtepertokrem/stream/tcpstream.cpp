@@ -64,7 +64,7 @@ void TcpStream::Read() {
       can_read = false;
     }
     else if (len == 0) {
-      Application::Instance().RemoveStreamLater(this);
+      //Application::Instance().RemoveStreamLater(this);
       can_read = false;
     }
   }
