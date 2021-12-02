@@ -12,6 +12,7 @@ add_library(libtepertokrem
         stream/tcpstream.hpp stream/tcpstream.cpp
         stream/stream2.hpp stream/stream2.cpp
         http/http.hpp http/http.cpp
+        http/request.hpp http/request.cpp
         )
 set_target_properties(libtepertokrem PROPERTIES PREFIX "")
 target_compile_options(libtepertokrem PRIVATE -ggdb -O0 -Wall -Wextra -pedantic -march=native -fsanitize=address -fno-omit-frame-pointer)
