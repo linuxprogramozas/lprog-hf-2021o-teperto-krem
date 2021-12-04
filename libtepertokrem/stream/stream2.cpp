@@ -33,7 +33,7 @@ void Stream2::Read() {
 
 void Stream2::Write() {
   if (handle_) {
-    handle_.promise().can_write = false;
+    handle_.promise().can_write = true;
     if (!handle_.done())
       handle_.resume();
   }
@@ -51,6 +51,24 @@ bool Stream2::NeedWrite() const {
     return handle_.promise().need_write;
   }
   return false;
+}
+
+void Stream2::AddToWriteBuffer(const std::vector<char> &buf) {
+  if (handle_) {
+    handle_.promise().write_buffer.insert(handle_.promise().write_buffer.end(), buf.begin(), buf.end());
+    if (!handle_.done())
+      handle_.resume();
+  }
+}
+
+void Stream2::AddToWriteBuffer(const std::stringstream &buf) {
+  if (handle_) {
+    handle_.promise().write_buffer.insert(handle_.promise().write_buffer.end(),
+                                          buf.rdbuf()->view().begin(), buf.rdbuf()->view().end());
+    if (!handle_.done()) {
+      handle_.resume();
+    }
+  }
 }
 
 void Stream2::SetSelf(StreamContainer *container) {
@@ -74,6 +92,13 @@ std::suspend_always Stream2::promise_type::yield_value(ClientSocket csock) {
   return std::suspend_always{};
 }
 
+std::suspend_never Stream2::promise_type::yield_value(http::Request *request) {
+  can_write = false;
+  can_read = false;
+  Application::Instance().ProcessHttp(self, request);
+  return std::suspend_never{};
+}
+
 bool Stream2::StreamEnableRW::await_ready() const noexcept {
   return false;
 }
@@ -84,6 +109,8 @@ void Stream2::StreamEnableRW::await_suspend(coro_handle handle) noexcept {
       (read.value != handle.promise().need_read) || (write.value != handle.promise().need_write);
   handle.promise().need_read = read.value;
   handle.promise().need_write = write.value;
+  handle.promise().can_read = false;
+  handle.promise().can_write = false;
   if (kChangeHappened) {
     // Modosit
     Application::Instance().UpdateInEPoll(handle.promise().self);
@@ -96,6 +123,7 @@ Stream2::StreamEvent Stream2::StreamEnableRW::await_resume() const noexcept {
     event.read = promise->can_read;
     event.write = promise->can_write;
     event.close = promise->should_close;
+    event.write_buffer = &promise->write_buffer;
   }
   return event;
 }

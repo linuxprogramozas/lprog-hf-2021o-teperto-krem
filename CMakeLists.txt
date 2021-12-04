@@ -8,5 +8,5 @@ add_executable(tepertokrem
 add_dependencies(tepertokrem libtepertokrem)
 target_include_directories(tepertokrem PRIVATE libtepertokrem)
 target_link_directories(tepertokrem PRIVATE cmake-build-debug/libtepertokrem)
-target_compile_options(tepertokrem PRIVATE -ggdb -O0 -Wall -Wextra -pedantic -march=native -fsanitize=address -fno-omit-frame-pointer)
-target_link_libraries(tepertokrem -lasan -ltepertokrem)
+target_compile_options(tepertokrem PRIVATE -ggdb -O0 -Wall -Wextra -pedantic -march=native -fsanitize=address -fno-omit-frame-pointer -pthread)
+target_link_libraries(tepertokrem -lasan -ltepertokrem -lmagic)

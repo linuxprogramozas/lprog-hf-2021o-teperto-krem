@@ -12,11 +12,15 @@
 #include <cerrno>
 #include <cstring>
 #include <unistd.h>
+#include <sys/eventfd.h>
 #include "../address.hpp"
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
 #include "../stream/tcpstream.hpp"
 #include "../http/http.hpp"
+
+#include "../utility/fileloader.hpp"
+#include <sstream>
 
 namespace {
 volatile std::sig_atomic_t running = 0;
@@ -80,7 +84,21 @@ int Application::ListenAndServe(Address address) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
     return 1;
   }
+
+  event_ = eventfd(0, EFD_NONBLOCK);
+  std::memset(&event, 0, sizeof(epoll_event));
+  event.events = EPOLLIN;
+  event.data.ptr = &event_;
+  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, event_, &event); res < 0) {
+    std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
+    return 1;
+  }
+
   running = 1;
+
+  FileLoader fl(event_);
+  loader_ = &fl;
+
   return EventLoop();
 }
 
@@ -115,6 +133,10 @@ int Application::EventLoop() {
             }
           }
         }
+        else if (events[i].data.ptr == &event_) {
+          std::array<char, 8> _ = {};
+          read(event_, _.data(), _.size());
+        }
         else {
           if (events[i].events & EPOLLERR) {
             RemoveStreamLater(reinterpret_cast<StreamContainer*>(events[i].data.ptr));
@@ -131,6 +153,18 @@ int Application::EventLoop() {
         }
       }
     }
+    pthread_mutex_lock(&http_handle_mutex_);
+    for (auto &handle: http_handles_ready_) { // Vegig iteralok minden futattasra kesz handle-on
+      if (!handle.done()) { // Ha nincs kesz futtatom
+        handle.resume();
+      }
+      if (handle.done()) { // Ha elkeszult akkor beteszem a kesz listaba
+        http_handles_done_.insert(handle);
+      }
+    }
+    http_handles_ready_.clear(); // Uritem a futtatasra kesz listat
+    pthread_mutex_unlock(&http_handle_mutex_);
+    RemoveHttpHandles(); // Elobb a http handlek eltavolitasa mert az lehet, hogy magaval vonja egy stream bezarasat is
     RemoveStreams();
   }
   return 0;
@@ -161,21 +195,88 @@ void Application::RemoveStreamLater(StreamContainer *s) {
 }
 
 void Application::RemoveStreams() {
-  // Broadcast stuff
-  /*
-  for (auto &s: remove_list_) {
-    auto tcp = dynamic_cast<TcpStream*>(s);
-    if (tcp != nullptr) {
-      Address address = tcp->GetAddress();
-      std::cerr << "Closed " << address.AddressString() << ":" << address.PortString() << std::endl;
-    }
-  }
-   */
   streams_.erase(
       std::remove_if(streams_.begin(), streams_.end(),
                      [this](auto &ptr) { return remove_list_.contains(ptr.get()); }),
                      streams_.end());
+  // Stop http handles
   remove_list_.clear();
+}
+
+Router &Application::RootRouter() {
+  return root_router_;
+}
+
+void Application::ProcessHttp(StreamContainer *s, http::Request *request) {
+  try {
+    auto func = root_router_.FindHandleFunc(request); // Ez dobhat kivetelt
+    auto writer = http::ResponseWriter{s};
+    pthread_mutex_lock(&http_handle_mutex_);
+    auto &handle = http_handles_[s] = func(writer, request);
+    handle.SetResponseWriter(writer);
+    http_handles_ready_.insert(handle.handle_);
+    pthread_mutex_unlock(&http_handle_mutex_);
+  }
+  catch (std::runtime_error &ex) {
+    std::cerr << ex.what() << std::endl;
+    auto err = "HTTP/1.0 404 NOT FOUND\r\n\r\n";
+    std::vector<char> data;
+    data.resize(std::strlen(err));
+    std::memcpy(data.data(), err, std::strlen(err));
+    s->stream.AddToWriteBuffer(data);
+  }
+}
+
+void Application::RemoveHttpHandles() {
+  pthread_mutex_lock(&http_handle_mutex_);
+  erase_if(http_handles_, [this](const auto &item) -> bool {
+    const auto &[kEy, kHandle] = item;
+    return http_handles_done_.contains(kHandle.handle_);
+  });
+  erase_if(http_handle_waiting_, [this](const auto &item) -> bool {
+    return http_handles_done_.contains(item);
+  });
+  pthread_mutex_unlock(&http_handle_mutex_);
+  http_handles_done_.clear();
+}
+
+void Application::LoadFileHttp(http::Handle::coro_handle handle, std::filesystem::path file) {
+  // Ez egy coroutinebol (kb) hivodik
+  // Coroutine feldolgozas kozben a mutex lockolva van itt nem kell ujra
+  http_handle_waiting_.insert(handle);
+  loader_->AddTask({
+    .file = file,
+    .on_success = [this, handle](std::vector<char> &&data, std::string_view mime){
+      FileLoadSuccessHttp(handle, std::move(data), mime);
+    },
+    .on_failure = [this, handle](){
+      FileLoadFailureHttp(handle);
+    }
+  });
+}
+
+void Application::FileLoadSuccessHttp(http::Handle::coro_handle handle, std::vector<char> &&data, std::string_view mime) {
+  pthread_mutex_lock(&http_handle_mutex_);
+  if (http_handle_waiting_.contains(handle)) {
+    handle.promise().file_result_value = std::move(data);
+    handle.promise().file_result_mime = mime;
+    // stuff
+    http_handles_ready_.insert(handle);
+    http_handle_waiting_.erase(handle);
+  }
+  pthread_mutex_unlock(&http_handle_mutex_);
+}
+
+void Application::FileLoadFailureHttp(http::Handle::coro_handle handle) {
+  pthread_mutex_lock(&http_handle_mutex_);
+  if (http_handle_waiting_.contains(handle)) {
+    handle.promise().file_result_value->clear();
+    handle.promise().file_result_mime = {};
+    // stuff
+    http_handles_ready_.insert(handle);
+    http_handle_waiting_.erase(handle);
+  }
+  pthread_mutex_unlock(&http_handle_mutex_);
 }
 
 }

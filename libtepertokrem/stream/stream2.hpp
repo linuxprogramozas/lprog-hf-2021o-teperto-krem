@@ -7,10 +7,16 @@
 #include <coroutine>
 #include <memory>
 #include <utility>
+#include <vector>
+#include <sstream>
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
 
 namespace tepertokrem {
+
+namespace http {
+class Request;
+}
 
 class Stream2 {
  public:
@@ -38,26 +44,64 @@ class Stream2 {
 
   ClientSocket GetFileDescriptor() const;
 
+
+  /*!
+   * Jelzi a stream szamara, hogy lehet olvasni
+   */
   void Read();
+
+  /*!
+   * Jelzi a stream szamara, hogy lehet irni
+   */
   void Write();
 
+  /*!
+   * A stream var e adatra
+   */
   [[nodiscard]] bool NeedRead() const;
+
+  /*!
+   * A stream akar e adatot irni
+   */
   [[nodiscard]] bool NeedWrite() const;
 
+  void AddToWriteBuffer(const std::vector<char> &buf);
+
+  void AddToWriteBuffer(const std::stringstream &buf);
+
+  /*!
+   * A coroutine_handle-on at is el kell erni a coroutinet, ez oda tarolja a containert
+   */
   void SetSelf(struct StreamContainer *container);
 
+  /*!
+   * @return A stream meg ervenyes e
+   */
   explicit operator bool() const;
 
   using StreamEnableRead = NamedType<bool, struct StreamEnableReadTag>;
   using StreamEnableWrite = NamedType<bool, struct StreamEnableWriteTag>;
   using StreamShouldClose = NamedType<bool, struct StreamShouldCloseTag>;
 
+  /*!
+   * Esemeny strukura a stream felebredesenek okarol
+   * Lehet (egyszerre tobb is):
+   *    Olvasas (read)
+   *    Iras (write)
+   *    Lezaras (close)
+   *    es lehet ures akkor a streamnek dontest kell hoznia, hogy legkozelebb
+   *    mire akar felebredni
+   */
   struct StreamEvent {
     StreamEnableRead read;
     StreamEnableWrite write;
     StreamShouldClose close;
+    std::vector<char> *write_buffer = nullptr;
   };
 
+  /*!
+   * A stream visszajelzese, hogy milyen esemenyekre szeretne felebredni
+   */
   struct StreamEnableRW {
     StreamEnableRead read;
     StreamEnableWrite write;
@@ -90,6 +134,8 @@ struct Stream2::promise_type {
   bool need_write = false;
   bool should_close = false;
 
+  std::vector<char> write_buffer;
+
   ClientSocket csock = ClientSocket{-1};
 
   StreamContainer *self = nullptr;
@@ -99,10 +145,11 @@ struct Stream2::promise_type {
   inline auto get_return_object() { return coro_handle::from_promise(*this); }
   inline auto initial_suspend() { return std::suspend_never{}; }
   inline auto final_suspend() noexcept { return std::suspend_always{}; }
-  void return_void() {}
-  void unhandled_exception() {}
+  inline void return_void() {}
+  inline void unhandled_exception() {}
 
   std::suspend_always yield_value(ClientSocket csock);
+  std::suspend_never yield_value(http::Request *request);
 
 };
 

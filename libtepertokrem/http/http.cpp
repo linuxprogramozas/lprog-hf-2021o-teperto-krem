@@ -89,14 +89,14 @@ Stream2 Http(ServerSocket ssock) {
   std::vector<char> input_buffer;
   http::Request request;
   bool request_received = false;
+  Stream2::StreamEvent event;
   do {
-    Stream2::StreamEvent event;
-    if (!request_received) {
-      event = co_await Stream2::StreamEnableRW{.read = Stream2::StreamEnableRead{true}};
-    }
-    else {
-      event = co_await Stream2::StreamEnableRW{};
-    }
+    Stream2::StreamEnableRW enable_rw{};
+    if (!request_received)
+      enable_rw.read = Stream2::StreamEnableRead{true};
+    if (event.write_buffer != nullptr && !event.write_buffer->empty())
+      enable_rw.write = Stream2::StreamEnableWrite{true};
+    event = co_await Stream2::StreamEnableRW{enable_rw};
     if (event.read) { // Olvasas
       auto result = ReadAll(conn.csock);
       switch (result.state) {
@@ -106,11 +106,7 @@ Stream2 Http(ServerSocket ssock) {
               result.data.begin(),
               result.data.end());
           if (request_received = request.ParseInput(); request_received) {
-            std::cerr << request.Method() << "\t" << request.Url() << std::endl;
-            std::cerr << request.GetBody() << std::endl;
-            std::cerr << "======ToltsdmarfelaZHt======" << std::endl;
-            // TODO: dispatch to http handle
-            // TODO:
+            co_yield &request;
           }
           break;
         }
@@ -123,7 +119,21 @@ Stream2 Http(ServerSocket ssock) {
         }
       }
     }
-    // TODO iras
+    if (event.write) {
+      auto sent = send(conn.csock.value, event.write_buffer->data(), event.write_buffer->size(), MSG_NOSIGNAL);
+      if (sent > 0) {
+        event.write_buffer->erase(event.write_buffer->begin(), event.write_buffer->begin() + sent);
+      }
+      if (event.write_buffer->empty()) {
+        if (const auto &values = request.GetHeader().Get("Connection"); !values.empty() && values.front() == "keep-alive") {
+          request = http::Request{};
+          request_received = false;
+        }
+        else {
+          co_return;
+        }
+      }
+    }
     if (event.close) {
       std::cerr << "Close requested" << std::endl;
       break;

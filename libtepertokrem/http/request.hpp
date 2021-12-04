@@ -7,7 +7,9 @@
 #include <string_view>
 #include <vector>
 #include <map>
+#include <utility>
 #include "strings.h"
+#include "header.hpp"
 
 namespace tepertokrem::http {
 class Request {
@@ -21,8 +23,13 @@ class Request {
   };
  public:
   Request() = default;
+  Request(const Request&) = delete;
+  Request &operator=(const Request&) = delete;
+  Request(Request&&) noexcept = default;
+  Request &operator=(Request&&) noexcept = default;
 
-  using Header = std::map<std::string_view, std::string_view, StrICmp>;
+  //using Header = std::map<std::string_view, std::vector<std::string_view>, StrICmp>;
+
 
   std::vector<char> &GetInputBuffer();
   bool ParseInput();
@@ -32,7 +39,10 @@ class Request {
   [[nodiscard]] std::string_view Url() const;
 
   [[nodiscard]] std::string_view GetBody() const;
+  [[nodiscard]] const Header &GetHeader() const;
 
+  std::map<std::string, std::string> vars_;
+  std::vector<std::string> parsed_url_;
  private:
   std::vector<char> input_buffer_;
 

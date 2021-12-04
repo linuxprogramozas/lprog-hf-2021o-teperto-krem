@@ -15,7 +15,7 @@ std::vector<char> &Request::GetInputBuffer() {
 
 bool Request::ParseInput() {
   std::string_view view(input_buffer_.data(), input_buffer_.size());
-  if (header_.empty()) {
+  if (header_.Empty()) {
     auto end_pos = view.find("\r\n\r\n");
     if (end_pos != std::string_view::npos) {
       // Csak a fejresz minden sor \r\n-el (vagy legalabb \n-el) zarva
@@ -47,12 +47,12 @@ bool Request::ParseInput() {
               auto trim_pos = value.find_last_not_of(' ');
               value.remove_suffix(value.length() - trim_pos - 1);
             }
-            header_[key] = value;
+            header_.Add(key, value);
           }
         } while (start < end_pos);
       }
-      if (header_.contains("content-length")) {
-        std::stringstream ss{std::string{header_["content-length"]}};
+      if (const auto &values = header_.Get("content-length"); !values.empty()) {
+        std::stringstream ss{std::string{values.front()}};
         ss >> content_length_;
         body_start_pos_ = end_pos + 4;
       }
@@ -80,6 +80,10 @@ std::string_view Request::Url() const {
 
 std::string_view Request::GetBody() const {
   return body_;
+}
+
+const Header &Request::GetHeader() const {
+  return header_;
 }
 
 }
