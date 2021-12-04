@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
   app.RootRouter()
     + Router::Methods{FileServer(base_dir), {"GET"}};
 
-  app.RootRouter() / "kec ske"
+  app.RootRouter() / "kecske"
     + Router::Methods{Kecske, {"GET"}};
 
   auto &banana = app.RootRouter() / "banan" / Router::Variable{"banana_count"}
