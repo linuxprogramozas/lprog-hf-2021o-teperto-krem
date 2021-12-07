@@ -1,0 +1,19 @@
+.board {
+    background-color: grey;
+    display: inline-grid;
+    width: auto;
+    grid-template-rows: repeat(3, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.board > .field {
+    width: 100px;
+    height: 100px;
+    background-color: lightgrey;
+    margin: 10px;
+}
+
+.board > .field > img {
+    width: 100px;
+}
+

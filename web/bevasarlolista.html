@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8"/>
+    <title>Bevasarlolista</title>
+    <style>
+        form label {
+            display: inline-block;
+            width: 150px;
+            text-align: left;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+<form action="/bevasarlolista/add" method="post" id="bevasarlolista">
+    <label for="aru">Aru:</label>
+    <input autocomplete="off" type="text" id="aru" name="aru" required> <br>
+</form>
+<button type="submit" form="bevasarlolista">Küldés</button>
+</body>
+</html>
