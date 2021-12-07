@@ -11,20 +11,19 @@
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
+#include <sstream>
 #include <unistd.h>
 #include <sys/eventfd.h>
 #include "../address.hpp"
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
-#include "../stream/tcpstream.hpp"
 #include "../http/http.hpp"
-
+#include "../utility/url.hpp"
 #include "../utility/fileloader.hpp"
-#include <sstream>
 
 namespace {
 volatile std::sig_atomic_t running = 0;
-void SignalHandler(int signal) {
+void SignalHandler([[maybe_unused]] int signal) {
   running = 0;
 }
 }
@@ -42,7 +41,7 @@ void Application::Stop() {
     shutdown(ssock_.value, SHUT_RDWR);
     close(ssock_.value);
   }
-  // Free stuff
+  close(event_.value);
 }
 
 Application::Application() {
@@ -89,7 +88,7 @@ int Application::ListenAndServe(Address address) {
   std::memset(&event, 0, sizeof(epoll_event));
   event.events = EPOLLIN;
   event.data.ptr = &event_;
-  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, event_, &event); res < 0) {
+  if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, event_.value, &event); res < 0) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
     return 1;
   }
@@ -135,7 +134,7 @@ int Application::EventLoop() {
         }
         else if (events[i].data.ptr == &event_) {
           std::array<char, 8> _ = {};
-          read(event_, _.data(), _.size());
+          read(event_.value, _.data(), _.size());
         }
         else {
           if (events[i].events & EPOLLERR) {
@@ -171,20 +170,20 @@ int Application::EventLoop() {
 }
 
 void Application::AddToEPoll(StreamContainer *s) {
-  epoll_event event;
+  epoll_event event = {};
   event.data.ptr = s;
   event.events =
-      (s->stream.NeedRead() ? EPOLLIN: 0) | (s->stream.NeedWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
+      (s->stream.NeedRead() ? uint32_t(EPOLLIN): 0u) | (s->stream.NeedWrite() ? uint32_t(EPOLLOUT) : 0u) | uint32_t(EPOLLET) | uint32_t(EPOLLRDHUP);
   if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_ADD, s->stream.GetFileDescriptor().value, &event); res < 0) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
   }
 }
 
 void Application::UpdateInEPoll(StreamContainer *s) {
-  epoll_event event;
+  epoll_event event = {};
   event.data.ptr = s;
   event.events =
-      (s->stream.NeedRead() ? EPOLLIN: 0) | (s->stream.NeedWrite() ? EPOLLOUT : 0) | EPOLLET | EPOLLRDHUP;
+      (s->stream.NeedRead() ? uint32_t(EPOLLIN): 0u) | (s->stream.NeedWrite() ? uint32_t(EPOLLOUT) : 0u) | uint32_t(EPOLLET) | uint32_t(EPOLLRDHUP);
   if (auto res = epoll_ctl(epoll_fd_.value, EPOLL_CTL_MOD, s->stream.GetFileDescriptor().value, &event); res < 0) {
     std::cerr << "epoll_ctl(EPOLL_CTL_ADD): " << std::strerror(errno) << std::endl;
   }
@@ -246,7 +245,7 @@ void Application::LoadFileHttp(http::Handle::coro_handle handle, std::filesystem
   http_handle_waiting_.insert(handle);
   loader_->AddTask({
     .file = file,
-    .on_success = [this, handle](std::vector<char> &&data, std::string_view mime){
+    .on_success = [this, handle](std::vector<char> &&data, std::string mime){
       FileLoadSuccessHttp(handle, std::move(data), mime);
     },
     .on_failure = [this, handle](){
@@ -255,12 +254,11 @@ void Application::LoadFileHttp(http::Handle::coro_handle handle, std::filesystem
   });
 }
 
-void Application::FileLoadSuccessHttp(http::Handle::coro_handle handle, std::vector<char> &&data, std::string_view mime) {
+void Application::FileLoadSuccessHttp(http::Handle::coro_handle handle, std::vector<char> &&data, std::string mime) {
   pthread_mutex_lock(&http_handle_mutex_);
   if (http_handle_waiting_.contains(handle)) {
     handle.promise().file_result_value = std::move(data);
     handle.promise().file_result_mime = mime;
-    // stuff
     http_handles_ready_.insert(handle);
     http_handle_waiting_.erase(handle);
   }
@@ -272,7 +270,6 @@ void Application::FileLoadFailureHttp(http::Handle::coro_handle handle) {
   if (http_handle_waiting_.contains(handle)) {
     handle.promise().file_result_value->clear();
     handle.promise().file_result_mime = {};
-    // stuff
     http_handles_ready_.insert(handle);
     http_handle_waiting_.erase(handle);
   }

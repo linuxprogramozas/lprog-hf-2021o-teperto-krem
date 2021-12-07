@@ -12,6 +12,10 @@
 namespace tepertokrem {
 struct StreamContainer;
 namespace http {
+
+/**
+ * A valasz testet es fejlecet ebbe lehet visszairni
+ */
 class ResponseWriter {
  public:
   ResponseWriter() = default;
@@ -19,7 +23,16 @@ class ResponseWriter {
   ResponseWriter(const ResponseWriter&) = default;
   ResponseWriter &operator=(const ResponseWriter&) = default;
 
+  /**
+   * Valasz testenek egy stringstream tokeletes
+   * Szoveget ebbe a legegyszerubb irni, de ha kell binaris adatot is elfogat
+   */
   using BodyType = std::stringstream;
+
+  /**
+   * A valasz fejlecben egy kulcshoz (string) tobb ertek is tartozhat (vector<string>)
+   * A kulcsnal mindegy, hogy kis vagy nagybetu
+   */
   using HeaderType = std::map<std::string, std::vector<std::string>>;
 
   BodyType &Body();
@@ -28,8 +41,8 @@ class ResponseWriter {
  private:
   struct ResponseWriterData {
     StreamContainer *stream;
-    BodyType body;
-    HeaderType header;
+    BodyType body = {};
+    HeaderType header = {};
   };
   std::shared_ptr<ResponseWriterData> data_;
 };

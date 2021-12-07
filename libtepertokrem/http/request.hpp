@@ -12,24 +12,16 @@
 #include "header.hpp"
 
 namespace tepertokrem::http {
+/**
+ * Http keres tartalma
+ */
 class Request {
- private:
-  struct StrICmp {
-    inline bool operator()(const std::string_view &lhs, const std::string_view &rhs) const {
-      if (lhs.length() != rhs.length())
-        return std::cmp_less(lhs.length(), rhs.length());
-      return strncasecmp(lhs.data(), rhs.data(), lhs.length());
-    }
-  };
  public:
   Request() = default;
   Request(const Request&) = delete;
   Request &operator=(const Request&) = delete;
   Request(Request&&) noexcept = default;
   Request &operator=(Request&&) noexcept = default;
-
-  //using Header = std::map<std::string_view, std::vector<std::string_view>, StrICmp>;
-
 
   std::vector<char> &GetInputBuffer();
   bool ParseInput();

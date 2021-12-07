@@ -71,7 +71,7 @@ void Handle::LoadFile::await_suspend(coro_handle handle) noexcept {
   Application::Instance().LoadFileHttp(handle, file_);
 }
 
-std::tuple<Handle::FileResultValue, std::string_view>Handle::LoadFile::await_resume() const noexcept {
+std::tuple<Handle::FileResultValue, std::string>Handle::LoadFile::await_resume() const noexcept {
   return  {std::move(handle_.promise().file_result_value), handle_.promise().file_result_mime};
 }
 

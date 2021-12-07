@@ -18,6 +18,10 @@ namespace http {
 class Request;
 }
 
+/**
+ * Coroutine ami magaba folglal egy nem blokkolo tcp socketet, pipe-ot vagy akarmit ami epollal mukodik
+ * sajnos a atlagos fajlok ez alol kivetelt kepeznek
+ */
 class Stream2 {
  public:
   struct promise_type;

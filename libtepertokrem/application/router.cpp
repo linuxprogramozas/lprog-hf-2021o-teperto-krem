@@ -84,7 +84,7 @@ http::HandleFunc Router::FindHandleFunc(http::Request *request) {
   throw std::runtime_error{"can't find route"};
 }
 
-http::HandleFunc Router::FindHandleFuncRecursive(http::Request *request, std::string_view it, std::span<std::string_view> parts) {
+http::HandleFunc Router::FindHandleFuncRecursive(http::Request *request, [[maybe_unused]] std::string_view it, std::span<std::string_view> parts) {
   if (!parts.empty()) {
     auto front = DecodeUrl(parts.front());
     if (routes_.contains(front)) {

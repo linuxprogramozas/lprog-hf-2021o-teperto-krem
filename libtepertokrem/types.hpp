@@ -8,4 +8,5 @@
 namespace tepertokrem {
 using ServerSocket = NamedType<int, struct ServerSocketTag>;
 using ClientSocket = NamedType<int, struct ClientSocketTag>;
+using EventFileDescriptor = NamedType<int, struct EventFileDescriptorTag>;
 }

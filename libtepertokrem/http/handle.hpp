@@ -16,6 +16,19 @@ namespace tepertokrem {
 class Application;
 }
 namespace tepertokrem::http {
+
+/**
+ * Http kerest lekezelo coroutine
+ *
+ * Minden http handle egy
+ *      co_return Status::XXX;
+ * utasitasra kell vegzodjon
+ * Korabban is lehet igy returnolni
+ *
+ * A http handle-on belul lehetseges fajl beolvasasa
+ *      std::filesystem::path file;
+ *      auto[file, mime] = co_await Handle::LoadFile{file};
+ */
 class Handle {
  public:
   struct promise_type;
@@ -57,7 +70,7 @@ struct Handle::promise_type {
   ResponseWriter writer;
 
   FileResultValue file_result_value;
-  std::string_view file_result_mime;
+  std::string file_result_mime;
 };
 
 class Handle::LoadFile {
@@ -65,7 +78,7 @@ class Handle::LoadFile {
   explicit LoadFile(std::filesystem::path);
   bool await_ready() const noexcept;
   void await_suspend(coro_handle handle) noexcept;
-  std::tuple<FileResultValue, std::string_view> await_resume() const noexcept;
+  std::tuple<FileResultValue, std::string> await_resume() const noexcept;
  private:
   std::filesystem::path file_;
   coro_handle handle_;

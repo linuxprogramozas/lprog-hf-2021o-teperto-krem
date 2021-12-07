@@ -15,23 +15,40 @@
 namespace tepertokrem {
 class VariableRouter;
 
+/**
+ * Az url-ben egy darabjat reprezentalja (ami ket / kozott van)
+ */
 class Router {
  public:
   virtual ~Router() = default;
 
+  /**
+   * Leirja, hogy az adott utvonal milyen tipusu (GET, POST ...) kereseket
+   * tud kiszolgalni egy fuggvenyel
+   */
   struct Methods {
     http::HandleFunc func;
     std::vector<std::string> methods;
   };
 
+  /**
+   * Az utvonal egy olyan darabja ahol barmi lehet, valtozokent lesz kezelve
+   */
   struct Variable {
     std::string name;
   };
 
+  /**
+   * Utvonalak osszefuzese
+   */
   Router &operator/(std::string_view subroute);
-  Router &operator+(Methods m);
   VariableRouter &operator/(Variable variable);
 
+  Router &operator+(Methods m);
+
+  /**
+   * Megkeresi a fugvenyt ami egy kerest ki tud szolgalni
+   */
   http::HandleFunc FindHandleFunc(http::Request *request);
   virtual http::HandleFunc FindHandleFuncRecursive(http::Request *request, std::string_view it, std::span<std::string_view> parts);
  private:

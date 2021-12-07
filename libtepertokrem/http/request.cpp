@@ -62,7 +62,7 @@ bool Request::ParseInput() {
   if (content_length_ == 0) {
     return true;
   }
-  else if (body_start_pos_ + content_length_ >= input_buffer_.size()) {
+  else if (body_start_pos_ + content_length_ >= ssize_t(input_buffer_.size())) {
     body_ = {input_buffer_.begin() + body_start_pos_,
              input_buffer_.begin() + body_start_pos_ + content_length_};
     return true;

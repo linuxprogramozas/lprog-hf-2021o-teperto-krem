@@ -9,7 +9,7 @@
 #include <cstdint>
 
 namespace tepertokrem {
-FileLoader::FileLoader(int event): event_{event} {
+FileLoader::FileLoader(EventFileDescriptor event): event_{event} {
   if (pthread_create(
       &thread_,
       nullptr,
@@ -46,7 +46,7 @@ void FileLoader::Loop() {
       tasks.pop_front();
     }
     uint64_t e = 1;
-    write(event_, &e, sizeof(uint64_t));
+    write(event_.value, &e, sizeof(uint64_t));
   }
   magic_close(magic_);
 }
@@ -71,7 +71,14 @@ void FileLoader::Process(Task &task) {
     } while (len > 0);
     close(fd);
     if (len == 0) {
-      task.on_success(std::move(data), mime);
+      std::string mime_view = mime;
+      if (task.file.extension() == ".css") {
+        mime_view = "text/css";
+      }
+      if (task.file.extension() == "/js") {
+        mime_view = "application/javascript";
+      }
+      task.on_success(std::move(data), mime_view);
     }
   }
   else {

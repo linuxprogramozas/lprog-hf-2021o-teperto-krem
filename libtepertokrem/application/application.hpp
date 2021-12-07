@@ -12,7 +12,6 @@
 #include "../address.hpp"
 #include "../utility/named_type.hpp"
 #include "../types.hpp"
-#include "../stream/stream.hpp"
 #include "../stream/stream2.hpp"
 #include "../utility/fileloader.hpp"
 #include "router.hpp"
@@ -27,19 +26,57 @@ class Application {
  public:
   ~Application();
 
+  /**
+   * Az Application egy singleton, ezzel lehet elerni
+   * Varazs static van benne a hivasa szalbiztos
+   */
   static Application &Instance();
 
+  /**
+   * A megadott cim:port-on elkezd kereseket varni
+   */
   int ListenAndServe(Address address);
+
   void Stop();
 
+  /**
+   * A bezart kapcsolatokat kesobb torli ki
+   */
   void RemoveStreamLater(StreamContainer *s);
+
+  /**
+   * Egy kapcsolat beallitasait frissiti az epollban
+   */
   void UpdateInEPoll(StreamContainer *s);
 
+  /**
+   * Egy http kerest hozzaad a feldolgozando keresek listajahoz
+   */
   void ProcessHttp(StreamContainer *s, http::Request *request);
-  Router &RootRouter();
+
+  /**
+   * http::Handle ezen at kezdemenyezhet fajlbetoltest
+   */
   void LoadFileHttp(http::Handle::coro_handle handle, std::filesystem::path file);
-  void FileLoadSuccessHttp(http::Handle::coro_handle handle, std::vector<char> &&data, std::string_view mime);
+
+  /**
+   * Ha a fajl betoltes megtortent akkor azt ezzel lehet jelezni, hivasa szalbiztos
+   * @param handle kezdemenyezo
+   * @param data beolvasott adat
+   * @param mime az adat mime type-ja
+   */
+  void FileLoadSuccessHttp(http::Handle::coro_handle handle, std::vector<char> &&data, std::string mime);
+
+  /**
+   * Ha a fajl betoltese sikertelen akkot azt ezzel lehet jelezni
+   * @param handle kezdemenyezo
+   */
   void FileLoadFailureHttp(http::Handle::coro_handle handle);
+
+  /**
+   * / utvonal
+   */
+  Router &RootRouter();
  private:
   Application();
 
@@ -64,7 +101,7 @@ class Application {
   pthread_mutex_t http_handle_mutex_ = PTHREAD_MUTEX_INITIALIZER;
   void RemoveHttpHandles();
 
-  int event_ = 0;
+  EventFileDescriptor event_;
   FileLoader *loader_ = nullptr;
 };
 }
